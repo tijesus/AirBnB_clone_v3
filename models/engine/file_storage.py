@@ -71,11 +71,10 @@ class FileStorage:
 
     def get(self, cls, id):
         """ retrieves one object """
-        obj_dict = self.all(cls)
-        for k, v in obj_dict.items():
-            matchstring = cls + '.' + id
-            if k == matchstring:
-                return v
+        objects = list(self.all(cls).values())
+        for object in objects:
+            if object.id == id:
+                return object
 
         return None
 
