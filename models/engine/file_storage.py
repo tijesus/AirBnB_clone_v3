@@ -45,17 +45,17 @@ class FileStorage:
         json_objects = {}
         for key in self.__objects:
             json_objects[key] = self.__objects[key].to_dict()
-        with open(self.__file_path, 'w') as f:
+        with open(self.__file_path, 'w', encoding='utf-8') as f:
             json.dump(json_objects, f)
 
     def reload(self):
         """deserializes the JSON file to __objects"""
         try:
-            with open(self.__file_path, 'r') as f:
+            with open(self.__file_path, 'r', encoding='utf-8') as f:
                 jo = json.load(f)
             for key in jo:
                 self.__objects[key] = classes[jo[key]["__class__"]](**jo[key])
-        except:
+        except FileNotFoundError:
             pass
 
     def delete(self, obj=None):
@@ -71,30 +71,15 @@ class FileStorage:
 
     def get(self, cls, id):
         """ retrieves one object """
-        obj_dict = {}
-        obj = None
-        if cls:
-            obj_dict = FileStorage.__objects.values()
-            for item in obj_dict:
-                if item.id == id:
-                    obj = item
-            return obj
+        obj_dict = self.all(cls)
+        for k, v in obj_dict.items():
+            matchstring = cls + '.' + id
+            if k == matchstring:
+                return v
+
+        return None
 
     def count(self, cls=None):
         """ counts the number of objects of a class in storage """
-        if cls:
-            obj_list = []
-            obj_dict = FileStorage.__objects.values()
-            for item in obj_dict:
-                if type(item).__name__ == cls:
-                    obj_list.append(item)
-            return len(obj_list)
-        else:
-            obj_list = []
-            for class_name in classes:
-                if class_name == 'BaseModel':
-                    continue
-                obj_class = FileStorage.__objects
-                for item in obj_class:
-                    obj_list.append(item)
-            return len(obj_list)
+        obj_dict = self.all(cls)
+        return len(obj_dict)
