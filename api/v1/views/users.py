@@ -1,86 +1,83 @@
 #!/usr/bin/python3
-"""Users views"""
-from flask import jsonify, make_response, abort, request
+"""Handles all http methods for `User`"""
 from api.v1.views import app_views
+from flask import jsonify, request, abort
 from models import storage
 from models.user import User
+from hashlib import md5
 
 
-@app_views.route('/users',
-                 strict_slashes=False,
-                 methods=['GET', 'POST'])
-def view_users():
-    """Returns all User objects"""
-    if request.method == 'POST':
-        # Get the attributes from the request
-        data = request.get_json()
+@app_views.route("/users")
+def users():
+    """Get all users"""
+    users = storage.all(User)
+    result = []
 
-        if isinstance(data, dict):
-            pass
-        else:
-            return jsonify({"error": "Not a JSON"}), 400
+    for user in users.values():
+        result.append(user.to_dict())
 
-        if 'id' in data.keys():
-            data.pop("id")
-        if 'created_at' in data.keys():
-            data.pop("created_at")
-        if 'updated_at' in data.keys():
-            data.pop("updated_at")
-
-        if 'email' not in data.keys():
-            return jsonify({'error': 'Missing email'}), 400
-        if 'password' not in data.keys():
-            return jsonify({'error': 'Missing password'}), 400
-
-        # Create the object
-        obj = User(**data)
-
-        # Save the object in storage
-        storage.new(obj)
-        storage.save()
-        return jsonify(obj.to_dict()), 201
-
-    if request.method == 'GET':
-        users = storage.all("User")
-        list = []
-        for name, user in users.items():
-            list.append(user.to_dict())
-        return jsonify(list)
+    return jsonify(result)
 
 
-@app_views.route('/users/<id>',
-                 strict_slashes=False,
-                 methods=['GET', 'DELETE', 'PUT'])
-def view_user_id(id):
-    """Returns all User objects, or delete an
-    object if a given id
-    """
-    user = storage.get(User, id)
+@app_views.route("/users/<user_id>")
+def one_user(user_id):
+    """Get one user"""
+    user = storage.get(User, user_id)
+    if not user:
+        abort(404)
 
-    if user is None:
-        return abort(404)
+    return jsonify(user.to_dict())
 
-    if request.method == 'GET':
 
-        return jsonify(user.to_dict())
+@app_views.route("/users/<user_id>", methods=["DELETE"])
+def delete_user(user_id):
+    """Delete user"""
+    user = storage.get(User, user_id)
+    if not user:
+        abort(404)
 
-    if request.method == 'DELETE':
+    user.delete()
+    storage.save()
 
-        storage.delete(user)
-        storage.save()
-        return jsonify({}), 200
+    return jsonify({})
 
-    if request.method == 'PUT':
-        data = request.get_json()
-        if isinstance(data, dict):
-            pass
-        else:
-            return jsonify({"error": "Not a JSON"}), 400
 
-        for key, value in data.items():
-            if key not in ["id", "email", "created_at", "updated_at"]:
-                setattr(user, key, value)
-        # This save is possibly not working to obtain
-        # permanent changes in the data base
-        storage.save()
-        return jsonify(user.to_dict())
+@app_views.route("/users", methods=["POST"])
+def create_user():
+    """Create user"""
+    payload = request.get_json()
+    if not payload:
+        abort(400, "Not a JSON")
+    if "email" not in payload:
+        abort(400, "Missing email")
+    if "password" not in payload:
+        abort(400, "Missing password")
+
+    user = User(**payload)
+    user.save()
+
+    return jsonify(user.to_dict()), 201
+
+
+@app_views.route("/users/<user_id>", methods=["PUT"])
+def update_user(user_id):
+    """Update user"""
+    user = storage.get(User, user_id)
+    payload = request.get_json()
+    if not user:
+        abort(404)
+    if not payload:
+        abort(400, description="Not a JSON")
+
+    for key, value in user.to_dict().items():
+        if key not in ["id", "email", "created_at", "updated_at", "__class__"]:
+            if key in payload:
+                if key == "password":
+                    setattr(user, key,
+                            md5(str(payload[key]).encode()).hexdigest())
+                else:
+                    setattr(user, key,
+                            payload[key] if key in payload else value)
+    user.save()
+
+    return jsonify(user.to_dict())
